@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-scorer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: risk-scorer
+  template:
+    metadata:
+      labels:
+        app: risk-scorer
+    spec:
+      containers:
+        - name: risk-scorer
+          image: risk-scorer:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: risk-scorer
+spec:
+  selector:
+    app: risk-scorer
+  ports:
+    - port: 8000
+      targetPort: 8000

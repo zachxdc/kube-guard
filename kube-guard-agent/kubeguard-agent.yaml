@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeguard-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeguard-agent
+  template:
+    metadata:
+      labels:
+        app: kubeguard-agent
+    spec:
+      containers:
+        - name: agent
+          image: kubeguard-agent:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - name: fake-history
+              mountPath: /tmp
+          env:
+            - name: THRESHOLD
+              valueFrom:
+                configMapKeyRef:
+                  name: kubeguard-config # <- 你的 ConfigMap 名
+                  key: THRESHOLD
+            - name: KEYWORDS
+              valueFrom:
+                configMapKeyRef:
+                  name: kubeguard-config
+                  key: KEYWORDS
+      volumes:
+        - name: fake-history
+          hostPath:
+            path: /tmp
+            type: Directory
