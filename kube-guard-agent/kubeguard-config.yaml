@@ -4,4 +4,4 @@ metadata:
   name: kubeguard-config
 data:
   THRESHOLD: "0.6"
-  KEYWORDS: "nmap,nc ,nc-,netcat,masscan,curl ,wget ,powershell,bash -i,chmod 777,chattr,base64 -d,openssl,mkfifo"
+  KEYWORDS: "nmap,nc,nc-,netcat,masscan,curl,wget,powershell,bash -i,chmod 777,chattr,base64 -d,openssl,mkfifo"
