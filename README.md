@@ -26,6 +26,7 @@ eval $(minikube docker-env)
 ### 2. Build and deploy `risk-scorer`
 
 ```bash
+# In same terminal as step 1
 cd kube-guard-agent/risk-scorer
 docker build -t risk-scorer:latest .
 kubectl apply -f risk-scorer.yaml
@@ -35,6 +36,8 @@ kubectl apply -f risk-scorer.yaml
 
 ```bash
 # Create the configuration for the kubeguard-agent
+# In same terminal as step 2
+cd ../kube-guard-agent
 cat <<EOF > kubeguard-config.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -73,17 +76,8 @@ kubectl port-forward <kubeguard-agent-pod-name> 9000:9000
 ### 6. Simulate test data
 
 ```bash
-kubectl exec -it deploy/kubeguard-agent -- sh
-echo "curl http://evil" >> /tmp/history.log
-echo "nmap 10.0.0.1" >> /tmp/history.log
-echo "ls -la" >> /tmp/history.log
-exit
-```
-
-### 7. Port forward for dashboard
-
-```bash
-kubectl port-forward deploy/kubeguard-agent 9000:9000
+kubectl exec -it <kubeguard-agent-pod-name> -- sh -c 'echo "curl http://evil" >> /tmp/fake_bash_history.log'
+kubectl exec -it <kubeguard-agent-pod-name> -- sh -c 'echo "nmap 10.0.0.1" >> /tmp/fake_bash_history.log'
 ```
 
 Refresh the dashboard to see the events.
