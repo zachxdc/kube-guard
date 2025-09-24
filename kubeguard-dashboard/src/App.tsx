@@ -1,17 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+// filepath: /Users/zchen/Documents/GitHub/kube-guard/kubeguard-dashboard/src/App.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const API = "http://localhost:9000/events"; // make sure: kubectl port-forward deploy/kubeguard-agent 9000:9000
 const POLL_MS = 5000;
 
+interface Event {
+  time?: string;
+  line?: string;
+  score?: number;
+  alert?: boolean;
+  reason?: string;
+}
+
+type SortKey = "time" | "score" | "line";
+type SortDirection = "asc" | "desc";
+
 export default function App() {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [onlyAlerts, setOnlyAlerts] = useState(false);
-  const [sortKey, setSortKey] = useState("time"); // time | score | line
-  const [sortDir, setSortDir] = useState("desc"); // asc | desc
-  const timer = useRef(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [query, setQuery] = useState<string>("");
+  const [onlyAlerts, setOnlyAlerts] = useState<boolean>(false);
+  const [sortKey, setSortKey] = useState<SortKey>("time");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+  const timer = useRef<number | null>(null);
 
   const fetchEvents = async () => {
     try {
@@ -22,7 +34,7 @@ export default function App() {
       const data = await res.json();
       setEvents(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e.message || "fetch failed");
+      setError(e instanceof Error ? e.message : "fetch failed");
     } finally {
       setLoading(false);
     }
@@ -31,7 +43,9 @@ export default function App() {
   useEffect(() => {
     fetchEvents();
     timer.current = setInterval(fetchEvents, POLL_MS);
-    return () => clearInterval(timer.current);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -55,8 +69,8 @@ export default function App() {
         A = (a.line || "").toLowerCase();
         B = (b.line || "").toLowerCase();
       } else {
-        A = Date.parse(a.time || 0);
-        B = Date.parse(b.time || 0);
+        A = Date.parse(a.time || "0");
+        B = Date.parse(b.time || "0");
       }
       return sortDir === "asc" ? (A > B ? 1 : -1) : A < B ? 1 : -1;
     });
@@ -64,7 +78,7 @@ export default function App() {
     return rows;
   }, [events, query, onlyAlerts, sortKey, sortDir]);
 
-  const th = (key, label) => (
+  const th = (key: SortKey, label: string) => (
     <th
       onClick={() => {
         if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -80,7 +94,7 @@ export default function App() {
     </th>
   );
 
-  const buttonStyle = (isLoading) => ({
+  const buttonStyle = (isLoading: boolean): React.CSSProperties => ({
     padding: "10px 14px",
     borderRadius: 10,
     border: isLoading ? "1px solid #ddd" : "1px solid #111",
@@ -173,7 +187,7 @@ export default function App() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan="5"
+                  colSpan={5}
                   style={{ textAlign: "center", padding: 24, color: "#888" }}
                 >
                   No data
@@ -225,7 +239,11 @@ export default function App() {
   );
 }
 
-function Badge({ ok }) {
+interface BadgeProps {
+  ok: boolean;
+}
+
+function Badge({ ok }: BadgeProps) {
   const bg = ok ? "rgba(16, 185, 129, .15)" : "rgba(239, 68, 68, .15)";
   const fg = ok ? "rgb(16, 185, 129)" : "rgb(239, 68, 68)";
   const text = ok ? "OK" : "Alert";

@@ -1,6 +1,6 @@
 # KubeGuard Dashboard
 
-A React + Vite-based dashboard to visualize KubeGuard Agent's security events in real time.
+A React + TypeScript + Vite-based dashboard to visualize KubeGuard Agent's security events in real time.
 
 ## Features
 - Auto-refreshes every 5 seconds
