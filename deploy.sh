@@ -1,23 +1,17 @@
 #!/bin/bash
 
-# KubeGuard Quick Setup Script
-# This script sets up the entire KubeGuard platform in one command
-
 set -e
 
 echo "🚀 Starting KubeGuard deployment..."
 
-# Check if minikube is running
 if ! minikube status &> /dev/null; then
     echo "📦 Starting Minikube..."
     minikube start
 fi
 
-# Set docker environment
 echo "🐳 Setting up Docker environment..."
 eval $(minikube docker-env)
 
-# Deploy ConfigMap first
 echo "⚙️  Creating configuration..."
 kubectl apply -f - <<EOF
 apiVersion: v1
@@ -29,26 +23,33 @@ data:
   KEYWORDS: "nmap,nc,nc-,netcat,masscan,curl,wget,powershell,bash -i,chmod 777,chattr,base64 -d,openssl,mkfifo"
 EOF
 
-# Build and deploy risk-scorer
+if [ -n "$GEMINI_API_KEY" ]; then
+    echo "🔑 Creating Gemini API Key Secret..."
+    kubectl create secret generic gemini-api-key \
+        --from-literal=api-key="$GEMINI_API_KEY" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    echo "✅ Gemini API Key configured"
+else
+    echo "ℹ️  GEMINI_API_KEY not set, will use keyword-based scoring"
+    echo "   To enable AI scoring, set GEMINI_API_KEY environment variable and redeploy"
+fi
+
 echo "🤖 Building and deploying Risk Scorer..."
 cd kube-guard-agent/risk-scorer
 docker build -t risk-scorer:latest .
 kubectl apply -f risk-scorer.yaml
 cd ../..
 
-# Build and deploy kubeguard-agent
 echo "🛡️  Building and deploying KubeGuard Agent..."
 cd kube-guard-agent
 docker build -t kubeguard-agent:latest .
 kubectl apply -f kubeguard-agent.yaml
 cd ..
 
-# Wait for deployments to be ready
 echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --for=condition=available --timeout=120s deployment/risk-scorer
 kubectl wait --for=condition=available --timeout=120s deployment/kubeguard-agent
 
-# Get pod name for port forwarding
 AGENT_POD=$(kubectl get pods -l app=kubeguard-agent -o jsonpath='{.items[0].metadata.name}')
 
 echo "✅ KubeGuard deployed successfully!"

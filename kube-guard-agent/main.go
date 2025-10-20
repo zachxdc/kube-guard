@@ -28,9 +28,13 @@ func isSuspicious(s string) bool {
 }
 
 type scoreReq struct{ Lines []string `json:"lines"` }
-type scoreResp struct{ Scores []float64 `json:"scores"` }
+type scoreResp struct {
+	Scores  []float64 `json:"scores"`
+	Reasons []string  `json:"reasons"`
+	Source  string    `json:"source"`
+}
 
-func requestScores(lines []string) ([]float64, error) {
+func requestScores(lines []string) (*scoreResp, error) {
 	b, _ := json.Marshal(scoreReq{Lines: lines})
 	resp, err := http.Post("http://risk-scorer:8000/score", "application/json", bytes.NewReader(b))
 	if err != nil {
@@ -41,7 +45,7 @@ func requestScores(lines []string) ([]float64, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
-	return out.Scores, nil
+	return &out, nil
 }
 
 type Event struct {
@@ -68,16 +72,15 @@ func addEvent(e Event) {
 }
 
 func main() {
-	log.Println("🚀 KubeGuard Agent started (with AI scoring + /events)")
+	log.Println("🚀 KubeGuard Agent started (with Gemini AI scoring)")
 	path := "/tmp/fake_bash_history.log"
 
-	// 启动 HTTP 服务器：/events 返回最近结果
 	go func() {
 		http.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			if r.Method == http.MethodOptions { // 处理预检
+			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -87,7 +90,7 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(events)
 		})
-		log.Println("🌐 serving /events on :9000")
+		log.Println("🌐 Serving /events on :9000")
 		log.Fatal(http.ListenAndServe(":9000", nil))
 	}()
 
@@ -106,25 +109,42 @@ func main() {
 				}
 			}
 			if len(lines) > 0 {
-				if scores, err := requestScores(lines); err != nil {
-					log.Println("⚠️ scoring service not reachable:", err)
+				if result, err := requestScores(lines); err != nil {
+					log.Println("⚠️ Scoring service not reachable:", err)
 				} else {
+					sourceIcon := "🤖"
+					if result.Source == "gemini" {
+						sourceIcon = "✨ Gemini"
+					} else if result.Source == "cache" {
+						sourceIcon = "⚡ Cache"
+					} else if result.Source == "keywords" {
+						sourceIcon = "🔤 Keywords"
+					}
+					
 					for i, l := range lines {
-						alert := isSuspicious(l) || scores[i] >= 0.6
-						reason := "AI>=0.6"
-						if isSuspicious(l) {
-							reason = "rule"
+						score := result.Scores[i]
+						reason := "Unknown reason"
+						if i < len(result.Reasons) {
+							reason = result.Reasons[i]
 						}
+						
+						alert := isSuspicious(l) || score >= 0.6
+						
 						if alert {
-							log.Printf("🤖 AI-RISK %.2f | 🚨 %s\n", scores[i], l)
+							log.Printf("%s | SCORE: %.2f | 🚨 ALERT\n", sourceIcon, score)
+							log.Printf("   Command: %s\n", l)
+							log.Printf("   Reason: %s\n", reason)
 						} else {
-							log.Printf("🤖 AI-RISK %.2f | ✅ %s\n", scores[i], l)
+							log.Printf("%s | SCORE: %.2f | ✅ SAFE\n", sourceIcon, score)
+							log.Printf("   Command: %s\n", l)
+							log.Printf("   Reason: %s\n", reason)
 						}
+						
 						addEvent(Event{
-							Time:  time.Now().Format(time.RFC3339),
-							Line:  l,
-							Score: scores[i],
-							Alert: alert,
+							Time:   time.Now().Format(time.RFC3339),
+							Line:   l,
+							Score:  score,
+							Alert:  alert,
 							Reason: reason,
 						})
 					}

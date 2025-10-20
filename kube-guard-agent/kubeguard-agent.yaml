@@ -25,7 +25,7 @@ spec:
             - name: THRESHOLD
               valueFrom:
                 configMapKeyRef:
-                  name: kubeguard-config # <- 你的 ConfigMap 名
+                  name: kubeguard-config
                   key: THRESHOLD
             - name: KEYWORDS
               valueFrom:
