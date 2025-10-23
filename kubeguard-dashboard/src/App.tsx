@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import {
   Box,
   Container,
@@ -27,7 +26,7 @@ import {
   ArrowDownward as ArrowDownIcon,
 } from "@mui/icons-material";
 import { theme } from "./theme";
-import { API_CONFIG, EVENT_CONFIG } from "./config";
+import { API_CONFIG, EVENT_CONFIG, RISK_THRESHOLDS } from "./config";
 import {
   initializeMockData,
   addNewMockEvent,
@@ -53,16 +52,8 @@ export default function App() {
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isGeneratingRef = useRef<boolean>(false);
-  const fetchingRef = useRef<boolean>(false);
-  const fetchCounterRef = useRef<number>(0);
 
   const fetchEvents = async () => {
-    if (fetchingRef.current) return;
-
-    fetchingRef.current = true;
-    const currentFetch = ++fetchCounterRef.current;
-
     try {
       setLoading(true);
       setError("");
@@ -71,29 +62,18 @@ export default function App() {
         await new Promise((resolve) =>
           setTimeout(resolve, EVENT_CONFIG.NETWORK_DELAY_MS)
         );
-
-        if (currentFetch === fetchCounterRef.current) {
-          const mockData = getMockEvents();
-          setEvents(mockData);
-        }
+        const mockData = getMockEvents();
+        setEvents(mockData);
       } else {
         const res = await fetch(API_URL, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
-        if (currentFetch === fetchCounterRef.current) {
-          setEvents(Array.isArray(data) ? data : []);
-        }
+        setEvents(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      if (currentFetch === fetchCounterRef.current) {
-        setError(e instanceof Error ? e.message : "fetch failed");
-      }
+      setError(e instanceof Error ? e.message : "fetch failed");
     } finally {
-      if (currentFetch === fetchCounterRef.current) {
-        setLoading(false);
-      }
-      fetchingRef.current = false;
+      setLoading(false);
     }
   };
 
@@ -117,36 +97,16 @@ export default function App() {
   }, []);
 
   const handleGenerateTestData = () => {
-    if (!USE_DEMO_MODE) return;
-    if (isGeneratingRef.current) return;
+    if (!USE_DEMO_MODE || isGenerating) return;
 
-    isGeneratingRef.current = true;
-    fetchingRef.current = true;
-    
-    flushSync(() => {
-      setIsGenerating(true);
-    });
+    setIsGenerating(true);
+    generateBulkTestData(EVENT_CONFIG.BULK_GENERATE_COUNT);
+    const mockData = getMockEvents();
+    setEvents(mockData);
 
-    requestAnimationFrame(() => {
-      try {
-        generateBulkTestData(EVENT_CONFIG.BULK_GENERATE_COUNT);
-        const mockData = getMockEvents();
-        
-        flushSync(() => {
-          setEvents(mockData);
-        });
-      } catch (error) {
-        console.error("Failed to generate test data:", error);
-      } finally {
-        setTimeout(() => {
-          isGeneratingRef.current = false;
-          fetchingRef.current = false;
-          flushSync(() => {
-            setIsGenerating(false);
-          });
-        }, EVENT_CONFIG.BUTTON_DEBOUNCE_MS);
-      }
-    });
+    setTimeout(() => {
+      setIsGenerating(false);
+    }, EVENT_CONFIG.BUTTON_DEBOUNCE_MS);
   };
 
   const filtered = useMemo(() => {
@@ -188,6 +148,12 @@ export default function App() {
     }
   };
 
+  const getSeverity = (score: number) => {
+    if (score >= RISK_THRESHOLDS.HIGH_RISK) return { label: "Alert", color: "error" as const };
+    if (score >= RISK_THRESHOLDS.MEDIUM_RISK_UPPER) return { label: "Warning", color: "warning" as const };
+    return { label: "OK", color: "success" as const };
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ bgcolor: "background.default", minHeight: "100vh", py: 3 }}>
@@ -204,16 +170,34 @@ export default function App() {
           </Box>
 
           {USE_DEMO_MODE && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              <strong>Demo Mode:</strong> This is a preview with simulated data.
-              Deploy to your Kubernetes cluster for real-time monitoring.{" "}
-              <Link
-                href="https://github.com/zachxdc/kube-guard#quick-start"
-                target="_blank"
-                rel="noopener"
-              >
-                Learn more
-              </Link>
+            <Alert 
+              severity="warning" 
+              sx={{ 
+                mb: 2,
+                bgcolor: "warning.main",
+                color: "#000",
+                "& .MuiAlert-icon": {
+                  color: "#000",
+                },
+              }}
+            >
+              <Box>
+                <Box>
+                  <strong>Demo Mode:</strong> This is a preview with simulated data.
+                  Maximum {EVENT_CONFIG.MAX_EVENTS} events displayed (older events auto-removed).
+                </Box>
+                <Box sx={{ mt: 0.5 }}>
+                  Deploy to your Kubernetes cluster for real-time monitoring.{" "}
+                  <Link
+                    href="https://github.com/zachxdc/kube-guard#quick-start"
+                    target="_blank"
+                    rel="noopener"
+                    sx={{ color: "#000", textDecoration: "underline" }}
+                  >
+                    Learn more
+                  </Link>
+                </Box>
+              </Box>
             </Alert>
           )}
 
@@ -278,13 +262,13 @@ export default function App() {
             )}
           </Box>
 
-          <TableContainer component={Paper} elevation={2} key={`table-${events.length}`}>
+          <TableContainer component={Paper} elevation={2}>
             <Table size="small">
               <TableHead>
                 <TableRow>
                   <TableCell
                     onClick={() => handleSort("time")}
-                    sx={{ cursor: "pointer", fontWeight: 600 }}
+                    sx={{ cursor: "pointer", fontWeight: 600, minWidth: 150 }}
                   >
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                       Time
@@ -294,7 +278,7 @@ export default function App() {
                   </TableCell>
                   <TableCell
                     onClick={() => handleSort("score")}
-                    sx={{ cursor: "pointer", fontWeight: 600 }}
+                    sx={{ cursor: "pointer", fontWeight: 600, minWidth: 80 }}
                   >
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                       AI Score
@@ -312,8 +296,8 @@ export default function App() {
                         (sortDir === "asc" ? <ArrowUpIcon fontSize="small" /> : <ArrowDownIcon fontSize="small" />)}
                     </Box>
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Reason</TableCell>
+                  <TableCell sx={{ fontWeight: 600, minWidth: 100 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, minWidth: 200 }}>Reason</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -328,26 +312,45 @@ export default function App() {
                     <TableRow
                       key={e.id || `${e.time}-${e.line}`}
                       sx={{
-                        bgcolor: e.alert ? "error.light" : "transparent",
+                        bgcolor: 
+                          (e.score ?? 0) >= RISK_THRESHOLDS.HIGH_RISK
+                            ? "error.light"
+                            : (e.score ?? 0) >= RISK_THRESHOLDS.MEDIUM_RISK_UPPER
+                            ? "warning.light"
+                            : "transparent",
                       }}
                     >
-                      <TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
                         {e.time ? new Date(e.time).toLocaleString() : "-"}
                       </TableCell>
                       <TableCell>
                         {typeof e.score === "number" ? e.score.toFixed(2) : "-"}
                       </TableCell>
-                      <TableCell sx={{ fontFamily: "monospace" }}>
+                      <TableCell
+                        sx={{
+                          fontFamily: "monospace",
+                          wordBreak: "break-all",
+                          whiteSpace: "pre-wrap",
+                          maxWidth: 500,
+                        }}
+                      >
                         {e.line || "-"}
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={e.alert ? "Alert" : "OK"}
-                          color={e.alert ? "error" : "success"}
-                          size="small"
-                        />
+                        {(() => {
+                          const severity = getSeverity(e.score ?? 0);
+                          return (
+                            <Chip
+                              label={severity.label}
+                              color={severity.color}
+                              size="small"
+                            />
+                          );
+                        })()}
                       </TableCell>
-                      <TableCell>{e.reason || "-"}</TableCell>
+                      <TableCell sx={{ minWidth: 200, maxWidth: 500 }}>
+                        {e.reason || "-"}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
