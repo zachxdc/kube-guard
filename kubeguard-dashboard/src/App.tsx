@@ -20,6 +20,7 @@ export default function App() {
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastClickTime = useRef<number>(0);
 
   const fetchEvents = async () => {
     try {
@@ -56,7 +57,7 @@ export default function App() {
     timer.current = setInterval(() => {
       if (USE_DEMO_MODE) {
         // In demo mode, randomly add new events
-        if (Math.random() < 0.3) { // 30% chance per interval
+        if (Math.random() < 0.9) { // 90% chance per interval
           addNewMockEvent();
         }
       }
@@ -69,12 +70,20 @@ export default function App() {
   }, []);
 
   const handleGenerateTestData = async () => {
-    if (!USE_DEMO_MODE) return;
+    if (!USE_DEMO_MODE || isGenerating) return;
+    
+    // 防抖：如果距离上次点击不到 2 秒，直接返回
+    const now = Date.now();
+    if (now - lastClickTime.current < 2000) {
+      return;
+    }
+    lastClickTime.current = now;
     
     setIsGenerating(true);
+    
     try {
-      // Generate 10 new events
-      generateBulkTestData(10);
+      // Generate 5 new events
+      generateBulkTestData(5);
       // Refresh the display
       await fetchEvents();
     } finally {
