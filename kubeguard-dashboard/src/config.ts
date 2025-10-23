@@ -19,13 +19,6 @@ export const RISK_THRESHOLDS = {
   LOW_RISK_UPPER: 0.2,
 } as const;
 
-export const UI_CONFIG = {
-  MAX_WIDTH: 1200,
-  PADDING: 3,
-  BORDER_RADIUS: 2,
-  TABLE_FONT_SIZE: 14,
-} as const;
-
 export const RISK_DISTRIBUTION = {
   HIGH: 0.2,
   MEDIUM: 0.4,

