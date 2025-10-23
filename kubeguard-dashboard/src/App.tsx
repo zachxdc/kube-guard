@@ -153,7 +153,7 @@ export default function App() {
           📌 <strong>Demo Mode:</strong> This is a preview with simulated data. 
           Deploy to your Kubernetes cluster for real-time monitoring. 
           <a 
-            href="https://github.com/yourusername/kube-guard#quick-start" 
+            href="https://github.com/zachxdc/kube-guard#quick-start" 
             style={{ marginLeft: 8, color: "#92400E", textDecoration: "underline" }}
           >
             Learn more

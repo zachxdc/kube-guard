@@ -25,7 +25,7 @@ This guide shows you how to deploy the KubeGuard Dashboard to Vercel in **Demo M
 
 1. Click the button below:
 
-   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fyourusername%2Fkube-guard&project-name=kubeguard-demo&root-directory=kubeguard-dashboard&env=VITE_API_URL&envDescription=Set%20to%20%22demo%22%20for%20simulated%20data&envLink=https%3A%2F%2Fgithub.com%2Fyourusername%2Fkube-guard%23deployment)
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fzachxdc%2Fkube-guard&project-name=kubeguard-demo&root-directory=kubeguard-dashboard&env=VITE_API_URL&envDescription=Set%20to%20%22demo%22%20for%20simulated%20data&envLink=https%3A%2F%2Fgithub.com%2Fzachxdc%2Fkube-guard%23deployment)
 
 2. Set environment variable:
    - `VITE_API_URL` = `demo`
@@ -221,8 +221,8 @@ The demo mode:
 ## 🆘 Need Help?
 
 - 📖 [Main Documentation](../README.md)
-- 🐛 [Report Issues](https://github.com/yourusername/kube-guard/issues)
-- 💬 [Discussions](https://github.com/yourusername/kube-guard/discussions)
+- 🐛 [Report Issues](https://github.com/zachxdc/kube-guard/issues)
+- 💬 [Discussions](https://github.com/zachxdc/kube-guard/discussions)
 
 ---
 
