@@ -1,6 +1,6 @@
 // filepath: /Users/zchen/Documents/GitHub/kube-guard/kubeguard-dashboard/src/App.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { initializeMockData, addNewMockEvent, getMockEvents, type Event } from "./mockData";
+import { initializeMockData, addNewMockEvent, getMockEvents, generateBulkTestData, type Event } from "./mockData";
 
 // Get API URL from environment variable, fallback to localhost
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:9000/events";
@@ -18,6 +18,7 @@ export default function App() {
   const [onlyAlerts, setOnlyAlerts] = useState<boolean>(false);
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchEvents = async () => {
@@ -66,6 +67,20 @@ export default function App() {
       if (timer.current) clearInterval(timer.current);
     };
   }, []);
+
+  const handleGenerateTestData = async () => {
+    if (!USE_DEMO_MODE) return;
+    
+    setIsGenerating(true);
+    try {
+      // Generate 10 new events
+      generateBulkTestData(10);
+      // Refresh the display
+      await fetchEvents();
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     let rows = events.slice();
@@ -196,6 +211,20 @@ export default function App() {
         >
           {loading ? "Refreshing…" : "Refresh"}
         </button>
+        {USE_DEMO_MODE && (
+          <button
+            onClick={handleGenerateTestData}
+            disabled={isGenerating}
+            style={{
+              ...buttonStyle(isGenerating),
+              background: isGenerating ? "#eee" : "#10B981",
+              border: isGenerating ? "1px solid #ddd" : "1px solid #10B981",
+              color: isGenerating ? "#999" : "#fff",
+            }}
+          >
+            {isGenerating ? "Generating…" : "🎯 Generate Test Data"}
+          </button>
+        )}
         {error && <span style={{ color: "#c00" }}>Error: {error}</span>}
         {!error && (
           <span style={{ color: "#666" }}>

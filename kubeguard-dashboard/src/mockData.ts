@@ -146,3 +146,20 @@ export function addNewMockEvent(): Event {
 export function getMockEvents(): Event[] {
   return [...generatedEvents];
 }
+
+export function generateBulkTestData(count: number = 5): Event[] {
+  const newEvents: Event[] = [];
+  for (let i = 0; i < count; i++) {
+    newEvents.push(generateMockEvent());
+  }
+  
+  // Add to the beginning of the list
+  generatedEvents.unshift(...newEvents);
+  
+  // Keep only last 100 events
+  if (generatedEvents.length > 100) {
+    generatedEvents.splice(100);
+  }
+  
+  return newEvents;
+}

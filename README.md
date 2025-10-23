@@ -8,6 +8,12 @@ AI-powered Kubernetes security monitoring platform that detects suspicious comma
 
 **[📖 Quick Start Guide](QUICKSTART.md)** | **[🔧 Risk Scorer Docs](kube-guard-agent/risk-scorer/README.md)**
 
+## 🎭 Try Live Demo
+
+**[🚀 Try Live Demo →](https://kube-guard-a4bs49wf2-zachs-projects-9379fc17.vercel.app/)** (Simulated data, no K8s required)
+
+**🎯 Click "Generate Test Data" button to see more security events!**
+
 ## Features
 
 - Real-time monitoring of container command execution
