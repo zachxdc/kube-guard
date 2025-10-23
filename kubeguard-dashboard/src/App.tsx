@@ -1,16 +1,11 @@
 // filepath: /Users/zchen/Documents/GitHub/kube-guard/kubeguard-dashboard/src/App.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { initializeMockData, addNewMockEvent, getMockEvents, type Event } from "./mockData";
 
-const API = "http://localhost:9000/events"; // make sure: kubectl port-forward deploy/kubeguard-agent 9000:9000
+// Get API URL from environment variable, fallback to localhost
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:9000/events";
+const USE_DEMO_MODE = API_URL === "demo";
 const POLL_MS = 5000;
-
-interface Event {
-  time?: string;
-  line?: string;
-  score?: number;
-  alert?: boolean;
-  reason?: string;
-}
 
 type SortKey = "time" | "score" | "line";
 type SortDirection = "asc" | "desc";
@@ -23,16 +18,25 @@ export default function App() {
   const [onlyAlerts, setOnlyAlerts] = useState<boolean>(false);
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
-  const timer = useRef<number | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchEvents = async () => {
     try {
       setLoading(true);
       setError("");
-      const res = await fetch(API, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setEvents(Array.isArray(data) ? data : []);
+      
+      if (USE_DEMO_MODE) {
+        // Demo mode: use mock data
+        await new Promise(resolve => setTimeout(resolve, 300)); // Simulate network delay
+        const mockData = getMockEvents();
+        setEvents(mockData);
+      } else {
+        // Real mode: fetch from actual API
+        const res = await fetch(API_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setEvents(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "fetch failed");
     } finally {
@@ -41,8 +45,23 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (USE_DEMO_MODE) {
+      // Initialize mock data
+      initializeMockData();
+    }
+    
     fetchEvents();
-    timer.current = setInterval(fetchEvents, POLL_MS);
+    
+    timer.current = setInterval(() => {
+      if (USE_DEMO_MODE) {
+        // In demo mode, randomly add new events
+        if (Math.random() < 0.3) { // 30% chance per interval
+          addNewMockEvent();
+        }
+      }
+      fetchEvents();
+    }, POLL_MS);
+    
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
@@ -113,12 +132,34 @@ export default function App() {
       }}
     >
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 12 }}>
-        KubeGuard Dashboard
+        KubeGuard Dashboard {USE_DEMO_MODE && "🎭 Demo"}
       </h1>
       <p style={{ color: "#666", marginTop: 0, marginBottom: 16 }}>
-        Real-time view of agent detections (auto refresh every {POLL_MS / 1000}
-        s)
+        {USE_DEMO_MODE 
+          ? `Live demo with simulated security events (auto refresh every ${POLL_MS / 1000}s)`
+          : `Real-time view of agent detections (auto refresh every ${POLL_MS / 1000}s)`
+        }
       </p>
+      {USE_DEMO_MODE && (
+        <div style={{
+          padding: "12px 16px",
+          background: "#FEF3C7",
+          border: "1px solid #FCD34D",
+          borderRadius: 10,
+          marginBottom: 16,
+          fontSize: 14,
+          color: "#92400E"
+        }}>
+          📌 <strong>Demo Mode:</strong> This is a preview with simulated data. 
+          Deploy to your Kubernetes cluster for real-time monitoring. 
+          <a 
+            href="https://github.com/yourusername/kube-guard#quick-start" 
+            style={{ marginLeft: 8, color: "#92400E", textDecoration: "underline" }}
+          >
+            Learn more
+          </a>
+        </div>
+      )}
 
       <div
         style={{
@@ -233,7 +274,10 @@ export default function App() {
       </div>
 
       <footer style={{ marginTop: 16, color: "#888", fontSize: 12 }}>
-        Source: <code>GET {API}</code> (Agent /events)
+        Source: {USE_DEMO_MODE 
+          ? <><code>Demo Mode</code> (Simulated data)</> 
+          : <><code>GET {API_URL}</code> (Agent /events)</>
+        }
       </footer>
     </div>
   );
