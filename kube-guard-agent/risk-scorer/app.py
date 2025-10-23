@@ -28,7 +28,7 @@ WEIGHTS = {
 BIAS = -2.0
 
 CACHE_MAX_SIZE = 1000
-CACHE_TTL_SECONDS = 3600  # 1 hour
+CACHE_TTL_SECONDS = 3600
 cache: OrderedDict[str, Tuple[float, str, float]] = OrderedDict()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

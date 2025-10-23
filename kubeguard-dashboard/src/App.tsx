@@ -1,11 +1,44 @@
-// filepath: /Users/zchen/Documents/GitHub/kube-guard/kubeguard-dashboard/src/App.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { initializeMockData, addNewMockEvent, getMockEvents, generateBulkTestData, type Event } from "./mockData";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import {
+  Box,
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  Link,
+  ThemeProvider,
+} from "@mui/material";
+import {
+  Refresh as RefreshIcon,
+  PlayArrow as GenerateIcon,
+  ArrowUpward as ArrowUpIcon,
+  ArrowDownward as ArrowDownIcon,
+} from "@mui/icons-material";
+import { theme } from "./theme";
+import { API_CONFIG, EVENT_CONFIG } from "./config";
+import {
+  initializeMockData,
+  addNewMockEvent,
+  getMockEvents,
+  generateBulkTestData,
+  type Event,
+} from "./mockData";
 
-// Get API URL from environment variable, fallback to localhost
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:9000/events";
-const USE_DEMO_MODE = API_URL === "demo";
-const POLL_MS = 5000;
+const API_URL = import.meta.env.VITE_API_URL || API_CONFIG.DEFAULT_URL;
+const USE_DEMO_MODE = API_URL === API_CONFIG.DEMO_MODE_KEY;
+const POLL_MS = API_CONFIG.POLL_INTERVAL_MS;
 
 type SortKey = "time" | "score" | "line";
 type SortDirection = "asc" | "desc";
@@ -20,75 +53,100 @@ export default function App() {
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastClickTime = useRef<number>(0);
+  const isGeneratingRef = useRef<boolean>(false);
+  const fetchingRef = useRef<boolean>(false);
+  const fetchCounterRef = useRef<number>(0);
 
   const fetchEvents = async () => {
+    if (fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    const currentFetch = ++fetchCounterRef.current;
+
     try {
       setLoading(true);
       setError("");
-      
+
       if (USE_DEMO_MODE) {
-        // Demo mode: use mock data
-        await new Promise(resolve => setTimeout(resolve, 300)); // Simulate network delay
-        const mockData = getMockEvents();
-        setEvents(mockData);
+        await new Promise((resolve) =>
+          setTimeout(resolve, EVENT_CONFIG.NETWORK_DELAY_MS)
+        );
+
+        if (currentFetch === fetchCounterRef.current) {
+          const mockData = getMockEvents();
+          setEvents(mockData);
+        }
       } else {
-        // Real mode: fetch from actual API
         const res = await fetch(API_URL, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
+
+        if (currentFetch === fetchCounterRef.current) {
+          setEvents(Array.isArray(data) ? data : []);
+        }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "fetch failed");
+      if (currentFetch === fetchCounterRef.current) {
+        setError(e instanceof Error ? e.message : "fetch failed");
+      }
     } finally {
-      setLoading(false);
+      if (currentFetch === fetchCounterRef.current) {
+        setLoading(false);
+      }
+      fetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     if (USE_DEMO_MODE) {
-      // Initialize mock data
       initializeMockData();
     }
-    
+
     fetchEvents();
-    
+
     timer.current = setInterval(() => {
-      if (USE_DEMO_MODE) {
-        // In demo mode, randomly add new events
-        if (Math.random() < 0.9) { // 90% chance per interval
-          addNewMockEvent();
-        }
+      if (USE_DEMO_MODE && Math.random() < EVENT_CONFIG.AUTO_ADD_PROBABILITY) {
+        addNewMockEvent();
       }
       fetchEvents();
     }, POLL_MS);
-    
+
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
   }, []);
 
-  const handleGenerateTestData = async () => {
-    if (!USE_DEMO_MODE || isGenerating) return;
+  const handleGenerateTestData = () => {
+    if (!USE_DEMO_MODE) return;
+    if (isGeneratingRef.current) return;
+
+    isGeneratingRef.current = true;
+    fetchingRef.current = true;
     
-    // 防抖：如果距离上次点击不到 2 秒，直接返回
-    const now = Date.now();
-    if (now - lastClickTime.current < 2000) {
-      return;
-    }
-    lastClickTime.current = now;
-    
-    setIsGenerating(true);
-    
-    try {
-      // Generate 5 new events
-      generateBulkTestData(5);
-      // Refresh the display
-      await fetchEvents();
-    } finally {
-      setIsGenerating(false);
-    }
+    flushSync(() => {
+      setIsGenerating(true);
+    });
+
+    requestAnimationFrame(() => {
+      try {
+        generateBulkTestData(EVENT_CONFIG.BULK_GENERATE_COUNT);
+        const mockData = getMockEvents();
+        
+        flushSync(() => {
+          setEvents(mockData);
+        });
+      } catch (error) {
+        console.error("Failed to generate test data:", error);
+      } finally {
+        setTimeout(() => {
+          isGeneratingRef.current = false;
+          fetchingRef.current = false;
+          flushSync(() => {
+            setIsGenerating(false);
+          });
+        }, EVENT_CONFIG.BUTTON_DEBOUNCE_MS);
+      }
+    });
   };
 
   const filtered = useMemo(() => {
@@ -121,226 +179,198 @@ export default function App() {
     return rows;
   }, [events, query, onlyAlerts, sortKey, sortDir]);
 
-  const th = (key: SortKey, label: string) => (
-    <th
-      onClick={() => {
-        if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-        else {
-          setSortKey(key);
-          setSortDir(key === "line" ? "asc" : "desc");
-        }
-      }}
-      style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-      title="Click to sort"
-    >
-      {label} {sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : ""}
-    </th>
-  );
-
-  const buttonStyle = (isLoading: boolean): React.CSSProperties => ({
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: isLoading ? "1px solid #ddd" : "1px solid #111",
-    background: isLoading ? "#eee" : "#111",
-    color: isLoading ? "#999" : "#fff",
-    cursor: isLoading ? "not-allowed" : "pointer",
-  });
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "line" ? "asc" : "desc");
+    }
+  };
 
   return (
-    <div
-      style={{
-        fontFamily: "ui-sans-serif, system-ui",
-        padding: 24,
-        maxWidth: 1200,
-        margin: "0 auto",
-      }}
-    >
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 12 }}>
-        KubeGuard Dashboard {USE_DEMO_MODE && "🎭 Demo"}
-      </h1>
-      <p style={{ color: "#666", marginTop: 0, marginBottom: 16 }}>
-        {USE_DEMO_MODE 
-          ? `Live demo with simulated security events (auto refresh every ${POLL_MS / 1000}s)`
-          : `Real-time view of agent detections (auto refresh every ${POLL_MS / 1000}s)`
-        }
-      </p>
-      {USE_DEMO_MODE && (
-        <div style={{
-          padding: "12px 16px",
-          background: "#FEF3C7",
-          border: "1px solid #FCD34D",
-          borderRadius: 10,
-          marginBottom: 16,
-          fontSize: 14,
-          color: "#92400E"
-        }}>
-          📌 <strong>Demo Mode:</strong> This is a preview with simulated data. 
-          Deploy to your Kubernetes cluster for real-time monitoring. 
-          <a 
-            href="https://github.com/zachxdc/kube-guard#quick-start" 
-            style={{ marginLeft: 8, color: "#92400E", textDecoration: "underline" }}
-          >
-            Learn more
-          </a>
-        </div>
-      )}
+    <ThemeProvider theme={theme}>
+      <Box sx={{ bgcolor: "background.default", minHeight: "100vh", py: 3 }}>
+        <Container maxWidth="lg">
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+              KubeGuard Dashboard {USE_DEMO_MODE && "🎭 Demo"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {USE_DEMO_MODE
+                ? `Live demo with simulated security events (auto refresh every ${POLL_MS / 1000}s)`
+                : `Real-time view of agent detections (auto refresh every ${POLL_MS / 1000}s)`}
+            </Typography>
+          </Box>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search command/reason…"
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            minWidth: 260,
-          }}
-        />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={onlyAlerts}
-            onChange={(e) => setOnlyAlerts(e.target.checked)}
-          />
-          Only alerts
-        </label>
-        <button
-          onClick={fetchEvents}
-          disabled={loading}
-          style={buttonStyle(loading)}
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-        {USE_DEMO_MODE && (
-          <button
-            onClick={handleGenerateTestData}
-            disabled={isGenerating}
-            style={{
-              ...buttonStyle(isGenerating),
-              background: isGenerating ? "#eee" : "#10B981",
-              border: isGenerating ? "1px solid #ddd" : "1px solid #10B981",
-              color: isGenerating ? "#999" : "#fff",
+          {USE_DEMO_MODE && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>Demo Mode:</strong> This is a preview with simulated data.
+              Deploy to your Kubernetes cluster for real-time monitoring.{" "}
+              <Link
+                href="https://github.com/zachxdc/kube-guard#quick-start"
+                target="_blank"
+                rel="noopener"
+              >
+                Learn more
+              </Link>
+            </Alert>
+          )}
+
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1.5,
+              alignItems: "center",
+              mb: 2,
+              flexWrap: "wrap",
             }}
           >
-            {isGenerating ? "Generating…" : "🎯 Generate Test Data"}
-          </button>
-        )}
-        {error && <span style={{ color: "#c00" }}>Error: {error}</span>}
-        {!error && (
-          <span style={{ color: "#666" }}>
-            Showing <b>{filtered.length}</b> (raw {events.length})
-          </span>
-        )}
-      </div>
+            <TextField
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search command/reason…"
+              size="small"
+              sx={{ minWidth: 260 }}
+            />
 
-      <div
-        style={{
-          border: "1px solid #eee",
-          borderRadius: 14,
-          overflow: "hidden",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
-        }}
-      >
-        <table
-          style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}
-        >
-          <thead style={{ background: "#fafafa" }}>
-            <tr>
-              {th("time", "Time")}
-              {th("score", "AI Score")}
-              {th("line", "Command")}
-              <th>Status</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  style={{ textAlign: "center", padding: 24, color: "#888" }}
-                >
-                  No data
-                </td>
-              </tr>
-            ) : (
-              filtered.map((e, i) => (
-                <tr
-                  key={i}
-                  style={{
-                    borderTop: "1px solid #f0f0f0",
-                    background: e.alert
-                      ? "rgba(255, 59, 48, 0.06)"
-                      : "transparent",
-                  }}
-                >
-                  <td style={{ padding: 12, whiteSpace: "nowrap" }}>
-                    {e.time ? new Date(e.time).toLocaleString() : "-"}
-                  </td>
-                  <td
-                    style={{ padding: 12, fontVariantNumeric: "tabular-nums" }}
-                  >
-                    {typeof e.score === "number" ? e.score.toFixed(2) : "-"}
-                  </td>
-                  <td
-                    style={{
-                      padding: 12,
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, monospace",
-                    }}
-                  >
-                    {e.line || "-"}
-                  </td>
-                  <td style={{ padding: 12 }}>
-                    <Badge ok={!e.alert} />
-                  </td>
-                  <td style={{ padding: 12 }}>{e.reason || "-"}</td>
-                </tr>
-              ))
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={onlyAlerts}
+                  onChange={(e) => setOnlyAlerts(e.target.checked)}
+                />
+              }
+              label="Only alerts"
+            />
+
+            <Button
+              variant="contained"
+              startIcon={<RefreshIcon />}
+              onClick={fetchEvents}
+              disabled={loading}
+            >
+              {loading ? "Refreshing…" : "Refresh"}
+            </Button>
+
+            {USE_DEMO_MODE && (
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<GenerateIcon />}
+                onClick={handleGenerateTestData}
+                disabled={isGenerating}
+              >
+                {isGenerating ? "Generating…" : "Generate Test Data"}
+              </Button>
             )}
-          </tbody>
-        </table>
-      </div>
 
-      <footer style={{ marginTop: 16, color: "#888", fontSize: 12 }}>
-        Source: {USE_DEMO_MODE 
-          ? <><code>Demo Mode</code> (Simulated data)</> 
-          : <><code>GET {API_URL}</code> (Agent /events)</>
-        }
-      </footer>
-    </div>
-  );
-}
+            {error && (
+              <Typography color="error" variant="body2">
+                Error: {error}
+              </Typography>
+            )}
 
-interface BadgeProps {
-  ok: boolean;
-}
+            {!error && (
+              <Typography variant="body2" color="text.secondary">
+                Showing <strong>{filtered.length}</strong> (raw {events.length})
+              </Typography>
+            )}
+          </Box>
 
-function Badge({ ok }: BadgeProps) {
-  const bg = ok ? "rgba(16, 185, 129, .15)" : "rgba(239, 68, 68, .15)";
-  const fg = ok ? "rgb(16, 185, 129)" : "rgb(239, 68, 68)";
-  const text = ok ? "OK" : "Alert";
-  return (
-    <span
-      style={{
-        padding: "4px 10px",
-        borderRadius: 999,
-        background: bg,
-        color: fg,
-        fontWeight: 600,
-        fontSize: 12,
-      }}
-    >
-      {text}
-    </span>
+          <TableContainer component={Paper} elevation={2} key={`table-${events.length}`}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    onClick={() => handleSort("time")}
+                    sx={{ cursor: "pointer", fontWeight: 600 }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      Time
+                      {sortKey === "time" &&
+                        (sortDir === "asc" ? <ArrowUpIcon fontSize="small" /> : <ArrowDownIcon fontSize="small" />)}
+                    </Box>
+                  </TableCell>
+                  <TableCell
+                    onClick={() => handleSort("score")}
+                    sx={{ cursor: "pointer", fontWeight: 600 }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      AI Score
+                      {sortKey === "score" &&
+                        (sortDir === "asc" ? <ArrowUpIcon fontSize="small" /> : <ArrowDownIcon fontSize="small" />)}
+                    </Box>
+                  </TableCell>
+                  <TableCell
+                    onClick={() => handleSort("line")}
+                    sx={{ cursor: "pointer", fontWeight: 600 }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      Command
+                      {sortKey === "line" &&
+                        (sortDir === "asc" ? <ArrowUpIcon fontSize="small" /> : <ArrowDownIcon fontSize="small" />)}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Reason</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                      <Typography color="text.secondary">No data</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((e) => (
+                    <TableRow
+                      key={e.id || `${e.time}-${e.line}`}
+                      sx={{
+                        bgcolor: e.alert ? "error.light" : "transparent",
+                      }}
+                    >
+                      <TableCell>
+                        {e.time ? new Date(e.time).toLocaleString() : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {typeof e.score === "number" ? e.score.toFixed(2) : "-"}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: "monospace" }}>
+                        {e.line || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={e.alert ? "Alert" : "OK"}
+                          color={e.alert ? "error" : "success"}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{e.reason || "-"}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Source:{" "}
+              {USE_DEMO_MODE ? (
+                <>
+                  <code>Demo Mode</code> (Simulated data)
+                </>
+              ) : (
+                <>
+                  <code>GET {API_URL}</code> (Agent /events)
+                </>
+              )}
+            </Typography>
+          </Box>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }

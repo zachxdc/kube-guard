@@ -1,5 +1,7 @@
-// Mock data generator for demo mode
+import { EVENT_CONFIG, RISK_DISTRIBUTION } from "./config";
+
 export interface Event {
+  id?: string;
   time?: string;
   line?: string;
   score?: number;
@@ -285,14 +287,11 @@ const generatedEvents: Event[] = [];
 
 function getRandomCommand() {
   const rand = Math.random();
-  if (rand < 0.2) {
-    // 20% high risk
+  if (rand < RISK_DISTRIBUTION.HIGH) {
     return HIGH_RISK_COMMANDS[Math.floor(Math.random() * HIGH_RISK_COMMANDS.length)];
-  } else if (rand < 0.4) {
-    // 20% medium risk
+  } else if (rand < RISK_DISTRIBUTION.MEDIUM) {
     return MEDIUM_RISK_COMMANDS[Math.floor(Math.random() * MEDIUM_RISK_COMMANDS.length)];
   } else {
-    // 60% low risk
     return LOW_RISK_COMMANDS[Math.floor(Math.random() * LOW_RISK_COMMANDS.length)];
   }
 }
@@ -300,6 +299,7 @@ function getRandomCommand() {
 export function generateMockEvent(): Event {
   const cmd = getRandomCommand();
   const event: Event = {
+    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     ...cmd,
     time: new Date(Date.now() - eventCounter * 10000).toISOString()
   };
@@ -309,8 +309,7 @@ export function generateMockEvent(): Event {
 
 export function initializeMockData(): Event[] {
   if (generatedEvents.length === 0) {
-    // Generate initial dataset
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < EVENT_CONFIG.INITIAL_EVENTS_COUNT; i++) {
       generatedEvents.push(generateMockEvent());
     }
   }
@@ -318,11 +317,16 @@ export function initializeMockData(): Event[] {
 }
 
 export function addNewMockEvent(): Event {
-  const newEvent = generateMockEvent();
+  const cmd = getRandomCommand();
+  const newEvent: Event = {
+    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    ...cmd,
+    time: new Date().toISOString()
+  };
+  
   generatedEvents.unshift(newEvent);
   
-  // Keep only last 100 events
-  if (generatedEvents.length > 100) {
+  if (generatedEvents.length > EVENT_CONFIG.MAX_EVENTS) {
     generatedEvents.pop();
   }
   
@@ -333,18 +337,25 @@ export function getMockEvents(): Event[] {
   return [...generatedEvents];
 }
 
-export function generateBulkTestData(count: number = 5): Event[] {
+export function generateBulkTestData(count: number = EVENT_CONFIG.BULK_GENERATE_COUNT): Event[] {
   const newEvents: Event[] = [];
+  const baseTime = Date.now();
+  const timeIntervalMs = 1000;
+  
   for (let i = 0; i < count; i++) {
-    newEvents.push(generateMockEvent());
+    const cmd = getRandomCommand();
+    const event: Event = {
+      id: `${baseTime}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+      ...cmd,
+      time: new Date(baseTime - i * timeIntervalMs).toISOString()
+    };
+    newEvents.push(event);
   }
   
-  // Add to the beginning of the list
   generatedEvents.unshift(...newEvents);
   
-  // Keep only last 100 events
-  if (generatedEvents.length > 100) {
-    generatedEvents.splice(100);
+  if (generatedEvents.length > EVENT_CONFIG.MAX_EVENTS) {
+    generatedEvents.splice(EVENT_CONFIG.MAX_EVENTS);
   }
   
   return newEvents;
