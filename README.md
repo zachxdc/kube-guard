@@ -10,7 +10,7 @@ AI-powered Kubernetes security monitoring platform that detects suspicious comma
 
 ## 🎭 Try Live Demo
 
-**[🚀 Try Live Demo →](https://kube-guard-a4bs49wf2-zachs-projects-9379fc17.vercel.app/)** (Simulated data, no K8s required)
+**[🚀 Try Live Demo →](https://kube-guard.vercel.app/)** (Simulated data, no K8s required)
 
 **🎯 Click "Generate Test Data" button to see more security events!**
 
