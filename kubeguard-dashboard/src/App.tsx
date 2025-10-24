@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box,
   Container,
@@ -36,7 +36,7 @@ import {
 } from "./mockData";
 
 const API_URL = import.meta.env.VITE_API_URL || API_CONFIG.DEFAULT_URL;
-const USE_DEMO_MODE = API_URL === API_CONFIG.DEMO_MODE_KEY;
+const FORCE_DEMO_MODE = API_URL === API_CONFIG.DEMO_MODE_KEY;
 const POLL_MS = API_CONFIG.POLL_INTERVAL_MS;
 
 type SortKey = "time" | "score" | "line";
@@ -51,14 +51,15 @@ export default function App() {
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [useDemoMode, setUseDemoMode] = useState<boolean>(FORCE_DEMO_MODE);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      if (USE_DEMO_MODE) {
+      if (useDemoMode) {
         await new Promise((resolve) =>
           setTimeout(resolve, EVENT_CONFIG.NETWORK_DELAY_MS)
         );
@@ -66,26 +67,42 @@ export default function App() {
         setEvents(mockData);
       } else {
         const res = await fetch(API_URL, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          if (!FORCE_DEMO_MODE) {
+            setUseDemoMode(true);
+            initializeMockData();
+            const mockData = getMockEvents();
+            setEvents(mockData);
+            return;
+          }
+          throw new Error(`HTTP ${res.status}`);
+        }
         const data = await res.json();
         setEvents(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "fetch failed");
+      if (!FORCE_DEMO_MODE && !useDemoMode) {
+        setUseDemoMode(true);
+        initializeMockData();
+        const mockData = getMockEvents();
+        setEvents(mockData);
+      } else {
+        setError(e instanceof Error ? e.message : "fetch failed");
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [useDemoMode]);
 
   useEffect(() => {
-    if (USE_DEMO_MODE) {
+    if (useDemoMode) {
       initializeMockData();
     }
 
     fetchEvents();
 
     timer.current = setInterval(() => {
-      if (USE_DEMO_MODE && Math.random() < EVENT_CONFIG.AUTO_ADD_PROBABILITY) {
+      if (useDemoMode && Math.random() < EVENT_CONFIG.AUTO_ADD_PROBABILITY) {
         addNewMockEvent();
       }
       fetchEvents();
@@ -94,10 +111,10 @@ export default function App() {
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, []);
+  }, [useDemoMode, fetchEvents]);
 
   const handleGenerateTestData = () => {
-    if (!USE_DEMO_MODE || isGenerating) return;
+    if (!useDemoMode || isGenerating) return;
 
     setIsGenerating(true);
     generateBulkTestData(EVENT_CONFIG.BULK_GENERATE_COUNT);
@@ -160,16 +177,16 @@ export default function App() {
         <Container maxWidth="lg">
           <Box sx={{ mb: 2 }}>
             <Typography variant="h4" component="h1" gutterBottom>
-              KubeGuard Dashboard {USE_DEMO_MODE && "🎭 Demo"}
+              KubeGuard Dashboard {useDemoMode && "🎭 Demo"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {USE_DEMO_MODE
+              {useDemoMode
                 ? `Live demo with simulated security events (auto refresh every ${POLL_MS / 1000}s)`
                 : `Real-time view of agent detections (auto refresh every ${POLL_MS / 1000}s)`}
             </Typography>
           </Box>
 
-          {USE_DEMO_MODE && (
+          {useDemoMode && (
             <Alert 
               severity="warning" 
               sx={{ 
@@ -237,7 +254,7 @@ export default function App() {
               {loading ? "Refreshing…" : "Refresh"}
             </Button>
 
-            {USE_DEMO_MODE && (
+            {useDemoMode && (
               <Button
                 variant="contained"
                 color="secondary"
@@ -361,7 +378,7 @@ export default function App() {
           <Box sx={{ mt: 2 }}>
             <Typography variant="caption" color="text.secondary">
               Source:{" "}
-              {USE_DEMO_MODE ? (
+              {useDemoMode ? (
                 <>
                   <code>Demo Mode</code> (Simulated data)
                 </>
